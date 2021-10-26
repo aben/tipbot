@@ -178,18 +178,8 @@ class TipBotContractClient {
     })
   }
   async subscribeUnreceivedEvent(address){
-    let account
-    try {
-      const idx = this.addressList.findIndex((val) => val == address);
-      const walletFileName = this.addressList[idx - idx % this.step];
-      const str = await readFile(path.join(this.walletDir, walletFileName), 'utf8');
-      const walletInfo = JSON.parse(str);
-      const activeWallet = wallet.getWallet(walletInfo.mnemonics);
-      account = activeWallet.deriveAddress(idx);
-    } catch (e) {
-      this.logger.error(e)
-    }
-    if (!account || account.address != address) {
+    const account = this.getAccount(address);
+    if (!account) {
       this.logger.error(`subscribeUnreceivedEvent error ${address}: %j`, account);
       return false
     }
@@ -219,6 +209,26 @@ class TipBotContractClient {
     };
     this.logger.debug('subscribeUnreceivedEvent successful', address, subscription.id)
     return subscription;
+  }
+
+  async getAccount (address){
+    let account;
+    try {
+      const idx = this.addressList.findIndex((val) => val == address);
+      const walletFileName = this.addressList[idx - idx % this.step];
+      const str = await readFile(path.join(this.walletDir, walletFileName), 'utf8');
+      const walletInfo = JSON.parse(str);
+      const activeWallet = wallet.getWallet(walletInfo.mnemonics);
+      const ac = activeWallet.deriveAddress(idx);
+      if (ac.address == address) {
+        account = ac;
+      } else {
+        this.logger.error(`${address}: $j`, ac);
+      }
+    } catch (e) {
+      this.logger.error(e)
+    }
+    return account;
   }
 
   async getAddressBalance(addr, tokenId=VITE_TOKENID){
@@ -472,12 +482,7 @@ class TipBotContractClient {
   }
 }
 
-function readableBalance(balance) {
-  return Number(BigInt(balance) / BigInt(1e10)) / 1e8;
-}
-
 
 module.exports = {
   TipBotContractClient,
-  readableBalance,
 }
