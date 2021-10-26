@@ -9,7 +9,6 @@ const crypto = require('crypto');
 const { WS_RPC } = require('@vite/vitejs-ws');
 const { ViteAPI, wallet } = require('@vite/vitejs');
 const { TwitterApi } = require('twitter-api-v2');
-const QRcode = require('qrcode');
 const Koa = require('koa');
 const Router = require('@koa/router');
 const bodyParser = require('koa-bodyparser')

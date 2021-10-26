@@ -212,6 +212,7 @@ class TipBotContractClient {
   }
 
   async getAccount (address){
+    this.logger.debug('getAccount', address);
     let account;
     try {
       const idx = this.addressList.findIndex((val) => val == address);

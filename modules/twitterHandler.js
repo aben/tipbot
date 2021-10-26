@@ -1,3 +1,5 @@
+const QRcode = require('qrcode');
+
 async function dmHandler(ctx, event) {
   if (!event.type == 'message_create') {
     return;
@@ -163,15 +165,16 @@ async function tweetHandler(ctx, event) {
 }
 async function depositHandler(ctx, address) {
   const balanceStr = await ctx.tipbotClient.getAddressBalance(address);
+  ctx.logger.debug('depositHandler', address, balanceStr);
   if (BigInt(balanceStr) > 0n) {
     const account = await ctx.tipbotClient.getAccount(address);
     if (!account) {
       return
     }
     const ret = await ctx.tipbotClient.deposit(account, balanceStr);
-    this.logger.debug('deposit %j', ret);
+    ctx.logger.debug('deposit %j', ret);
     if (ret) {
-      this.event.emit('notify', {
+      ctx.tipbotClient.event.emit('notify', {
         type: 'deposit',
         address,
         balanceStr,
