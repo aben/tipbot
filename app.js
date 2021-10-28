@@ -7,7 +7,7 @@ const util = require('util')
 const buffer = require('buffer');
 const crypto = require('crypto');
 const { WS_RPC } = require('@vite/vitejs-ws');
-const { ViteAPI, wallet } = require('@vite/vitejs');
+const { ViteAPI } = require('@vite/vitejs');
 const { TwitterApi } = require('twitter-api-v2');
 const Koa = require('koa');
 const Router = require('@koa/router');
@@ -113,72 +113,107 @@ router.post('/webhook/twitter', async(ctx, next) => {
 app.use(router.routes());
 app.use(router.allowedMethods());
 
-(async () => {
-  try {
-    // create vite client
-    let abi, platformMap;
-    try {
-      abi = JSON.parse(process.env.CONTRACT_ABI);
-      platformMap = JSON.parse(process.env.CONTRACT_PLATFORM_MAP);
-    } catch (e) {
-      console.log(e)
-      process.exit(1)
-    }
-    const viteNode = process.env.VITE_NODE
-    const connection = new WS_RPC(viteNode);
-    const provider = new ViteAPI(connection, async() => {
-      logger.info(`vite node(${viteNode}) connected`);
-      // create tipbot client
-      const contractAddr = process.env.CONTRACT_ADDRESS;
-      const tipbotClient = new TipBotContractClient({
-        provider,
-        logger,
-        abi,
-        address: contractAddr,
-        code: process.env.CONTRACT_CODE,
-        offChainCode: process.env.CONTRACT_OFFCHAIN_CODE,
-        walletDir: process.env.WALLET_DIR,
-        platformMap,
-      })
-      app.context.tipbotClient = tipbotClient;
-      // set owner
-      await tipbotClient.setOwner(process.env.CONTRACT_OWNER_MNEMONICS);
-      // subscribe log event
-      await tipbotClient.subscribeLogEvent(contractAddr, 'ResultEvent');
-      // subscribe addressList event
-      await tipbotClient.subscribeAddressListEvent();
-      // subscribe notify
-      logger.info('subscribe notify event');
-      tipbotClient.event.on('notify', async (event) => {
-        logger.info('notify %j', event);
-        if (event.type == 'deposit') {
-          const userId = await tipbotClient.getUserId(event.address);
-          const prefix = await tipbotClient.getPrefixByAddress(event.address);
-          const [platform, _] = Object.entries(platformMap).find(x => x[1] == prefix);
-          logger.debug(userId, prefix, platform);
-          if ( platform == 'twitter' ) {
-            const dm = {
-              recipient_id: userId ,
-              text: `Your account address received a deposit of ${readableBalance(event.balance)} VITE.\nHash: ${event.hash}`,
-            };
-            try {
-              logger.info('sendDm %j', dm)
-              await twitterClient.v1.sendDm(dm);
-            } catch (e) {
-              logger.error(e);
-            }
+async function subscribeEvent(tipbotClient) {
+  // FIXME resubscribe when websocket reconnect
+  // subscribe log event
+  await tipbotClient.subscribeLogEvent(tipbotClient.address, 'ResultEvent');
+  // subscribe addressList event
+  await tipbotClient.subscribeAddressListEvent();
+}
+
+function addEventListeners(conn, tipbotClient) {
+  logger.info('addEventListeners');
+  conn.socket.addEventListener('open', async (event) => {
+    logger.info('websocket open now');
+    await subscribeEvent(tipbotClient);
+  });
+  conn.socket.addEventListener('close', (event) => {
+    logger.info('websocket is closed now');
+    conn.reconnect();
+    addListener(conn);
+  })
+}
+
+async function main() {
+  // verify credentials
+  const currentUser = await twitterClient.v1.verifyCredentials();
+  logger.info('twitter access token verification passed');
+  app.context.twitterClient = twitterClient;
+  app.context.twitterOwner = currentUser;
+
+  // create vite client
+  const viteNode = process.env.VITE_NODE;
+  const conn = new WS_RPC(viteNode, 60000, {
+    protocol: '',
+    headers: '',
+    clientConfig: {
+      keepalive: true,
+      keepaliveInterval: 50000,
+    },
+    retryTimes: 10,
+    retryInterval: 10000
+  });
+
+  // create vite Client
+  // FIXME connectConnect and connectClose will be override.
+  conn.on('close', () => {});
+  const provider= new ViteAPI(conn, async (provider) => {
+    logger.info(`vite node(${viteNode}) connected`);
+    // create tipbot client
+    const tipbotClient = new TipBotContractClient({
+      provider,
+      logger,
+      abi: JSON.parse(process.env.CONTRACT_ABI),
+      address: process.env.CONTRACT_ADDRESS,
+      code: process.env.CONTRACT_CODE,
+      offChainCode: process.env.CONTRACT_OFFCHAIN_CODE,
+      walletFolder: process.env.WALLET_FOLDER,
+      platformMap: JSON.parse(process.env.CONTRACT_PLATFORM_MAP),
+    })
+    app.context.tipbotClient = tipbotClient;
+
+    // set owner
+    await tipbotClient.setOwner(process.env.CONTRACT_OWNER_MNEMONICS);
+
+    const balanceInfo = await tipbotClient.provider.getBalanceInfo(tipbotClient.address);
+    logger.info('getBalanceInfo %j', balanceInfo);
+
+    // subscribe events
+    await subscribeEvent(tipbotClient);
+
+    // subscribe notify
+    logger.info('subscribe notify event');
+    tipbotClient.event.on('notify', async (event) => {
+      logger.info('notify %j', event);
+      if (event.type == 'deposit') {
+        const userId = await tipbotClient.getUserId(event.address);
+        const prefix = await tipbotClient.getPrefixByAddress(event.address);
+        const [platform, _] = Object.entries(tipbotClient.platformMap).find(x => x[1] == prefix);
+        logger.debug(userId, prefix, platform);
+        if ( platform == 'twitter' ) {
+          const dm = {
+            recipient_id: userId ,
+            text: `Your account address received a deposit of ${readableBalance(event.balance)} VITE. Hash:\n${event.hash}`,
+          };
+          logger.info('sendDm %j', dm)
+          try {
+            await twitterClient.v1.sendDm(dm);
+          } catch (e) {
+            logger.error(e);
           }
         }
-      })
-    })
-    // verify credentials
-    const currentUser = await twitterClient.v1.verifyCredentials();
-    logger.info('twitter access token verification passed')
-    app.context.twitterClient = twitterClient;
-    app.context.twitterOwner = currentUser;
-  } catch (err) {
-    console.log(err)
-    process.exit(1)
-  }
+      }
+    });
+
+    // add even listener
+    setTimeout(() => {
+      addEventListeners(conn, tipbotClient);
+    }, 10000);
+  });
+
   app.listen(process.env.PORT || '8000');
-})()
+}
+
+main().then(() => {}).catch((err) => {
+  console.error(err);
+})

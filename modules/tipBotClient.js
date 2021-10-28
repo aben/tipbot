@@ -11,7 +11,7 @@ const VITE_TOKENID = "tti_5649544520544f4b454e6e40";
 const EMPTY_ADDRESS="vite_0000000000000000000000000000000000000000a4f3a0cb58"
 
 class TipBotContractClient {
-  constructor({provider, address, abi, code, offChainCode, logger, walletDir, platformMap}) {
+  constructor({provider, address, abi, code, offChainCode, logger, walletFolder, platformMap}) {
     this.provider = provider;
     this.address = address;
     this.abi = abi;
@@ -19,7 +19,7 @@ class TipBotContractClient {
     this.offChainCode = offChainCode;
     this.logger = logger;
     this.owner = null;
-    this.walletDir = walletDir;
+    this.walletFolder = walletFolder;
     this.platformMap = platformMap;
     this.step = 1000;
     this.addressList = [];
@@ -50,7 +50,11 @@ class TipBotContractClient {
       abi: this.getAbi('getOwner'),
       code: Buffer.from(this.offChainCode, 'hex').toString('base64'),
     })
-    this.logger.info('getOwner', ownerAddr);
+    if (ownerAddr == EMPTY_ADDRESS) {
+      this.logger.error('No owner found');
+    } else {
+      this.logger.info('getOwner', ownerAddr);
+    }
     const addressList = wallet.deriveAddressList({ 
       mnemonics: mnemonics, 
       startIndex: 0,
@@ -173,12 +177,12 @@ class TipBotContractClient {
     this.logger.info(`subscribe ${this.addressList.length} addresses event successful`);
     this.event.once('addUser', async ([ret]) => {
       if (ret.result == 'success') {
-        await this.subscribeUnreceivedEvent();
+        await this.subscribeAddressListEvent();
       }
     })
   }
   async subscribeUnreceivedEvent(address){
-    const account = this.getAccount(address);
+    const account = await this.getAccount(address);
     if (!account) {
       this.logger.error(`subscribeUnreceivedEvent error ${address}: %j`, account);
       return false
@@ -217,7 +221,7 @@ class TipBotContractClient {
     try {
       const idx = this.addressList.findIndex((val) => val == address);
       const walletFileName = this.addressList[idx - idx % this.step];
-      const str = await readFile(path.join(this.walletDir, walletFileName), 'utf8');
+      const str = await readFile(path.join(this.walletFolder, walletFileName), 'utf8');
       const walletInfo = JSON.parse(str);
       const activeWallet = wallet.getWallet(walletInfo.mnemonics);
       const ac = activeWallet.deriveAddress(idx);
@@ -337,7 +341,7 @@ class TipBotContractClient {
       newAddr = newWallet.deriveAddress(idx);
       try {
         // save wallet info to a file
-        const stream = fs.createWriteStream(path.join(this.walletDir, newAddr.address), {
+        const stream = fs.createWriteStream(path.join(this.walletFolder, newAddr.address), {
           flags: 'a',
           encoding: 'utf8',
         })
@@ -352,7 +356,7 @@ class TipBotContractClient {
     } else {
       const walletFileName = this.addressList[this.addressList.length - idx];
       try {
-        const str = await readFile(path.join(this.walletDir, walletFileName), 'utf8');
+        const str = await readFile(path.join(this.walletFolder, walletFileName), 'utf8');
         const walletInfo = JSON.parse(str);
         const activeWallet = wallet.getWallet(walletInfo.mnemonics);
         newAddr = activeWallet.deriveAddress(idx);
@@ -372,7 +376,6 @@ class TipBotContractClient {
     process.nextTick(async () => {
       try {
         info = await this.callContract(this.owner, 'addUser', '0', [userId, this.platformMap[platform], address]);
-        this.logger.info('addUser %j', info);
       } catch (e) {
         this.logger.error('%j', e);
         this.event.emit('addUser', {name: 'addUser', result: 'error'});
@@ -394,7 +397,6 @@ class TipBotContractClient {
     process.nextTick(async () => {
       try {
         info = await this.callContract(account, 'deposit', amount);
-        this.logger.info('deposit %j', info);
       } catch (e) {
         this.logger.error('%j', e);
         this.event.emit('deposit', {name: 'deposit', result: 'error'});
@@ -424,7 +426,6 @@ class TipBotContractClient {
     process.nextTick(async () => {
       try {
         info = await this.callContract(this.owner, 'withdrawByOwner', '0', [userAddress, withdrawAddress, amount]);
-        this.logger.info('withdraw %j', info);
       } catch (e) {
         this.logger.error('%j', e);
         this.event.emit('withdrawByOwner', {name: 'withdrawByOwner', result: 'error'});
@@ -445,8 +446,8 @@ class TipBotContractClient {
     let info;
     process.nextTick(async () => {
       try {
+        this.logger.info(`withdrawByAddress ${amount} from ${userAddress} to ${withdrawAddress}`);
         info = await this.callContract(this.owner, 'withdrawByOwner', '0', [userAddress, withdrawAddress, amount]);
-        this.logger.info('withdrawByAddress %j', info);
       } catch (e) {
         this.logger.error('%j', e);
         this.event.emit('withdrawByOwner', {name: 'withdrawByOwner', result: 'error'});

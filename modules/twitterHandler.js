@@ -1,3 +1,4 @@
+const { wallet } = require('@vite/vitejs');
 const QRcode = require('qrcode');
 
 async function dmHandler(ctx, event) {
@@ -16,12 +17,13 @@ async function dmHandler(ctx, event) {
   };
   try {
     let address = await ctx.tipbotClient.getUserAddress(senderId, 'twitter');
-    // workaround: sometimes can't receive createUnreceivedBlockSubscriptionByAddress event;
-    await depositHandler(ctx, address);
     if (address == null) {
       // create one
       address = await ctx.tipbotClient.deriveAddress(senderId, 'twitter');
       await ctx.tipbotClient.addUser(senderId, 'twitter', address);
+    } else {
+      // workaround: sometimes can't receive createUnreceivedBlockSubscriptionByAddress event;
+      await depositHandler(ctx, address);
     }
     let balanceStr, balance;
 
@@ -79,7 +81,7 @@ async function dmHandler(ctx, event) {
           if (balance >= amount && amount > BigInt(0)) {
             const ret = await ctx.tipbotClient.withdrawByAddress(address, withdrawAddress, amount.toString());
             if (ret) {
-              dm.text = `Withdraw successful.\nHash: ${ret.hash}`;
+              dm.text = `Withdraw successful. Hash:\n${ret.hash}`;
             }
           } else {
             dm.text = 'Your account address have not enough balance';
@@ -153,7 +155,7 @@ async function tweetHandler(ctx, event) {
     }
     if (balance >= amount) {
       const ret = await ctx.tipbotClient.tip(fromAddress, toAddress, amount.toString());
-      text = `You have successfully sent your ${amountStr} $VITE tip. Hash: ${ret.hash}`
+      text = `You have successfully sent your ${amountStr} $VITE tip. Hash:\n${ret.hash}`
     } else {
       text = `You do not have enough VITE to cover this ${amountStr} VITE tip.  Please check your balance by sending a DM to me with !balance and retry.`
     }
@@ -191,4 +193,5 @@ function readableBalance(balance) {
 module.exports = {
   dmHandler,
   tweetHandler,
+  readableBalance,
 }
