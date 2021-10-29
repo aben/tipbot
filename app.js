@@ -11,7 +11,9 @@ const { ViteAPI } = require('@vite/vitejs');
 const { TwitterApi } = require('twitter-api-v2');
 const Koa = require('koa');
 const Router = require('@koa/router');
-const bodyParser = require('koa-bodyparser')
+const bodyParser = require('koa-bodyparser');
+const redis = require('redis');
+
 const {
   TipBotContractClient,
   setupLogger,
@@ -22,6 +24,10 @@ const {
 
 // create app
 const app = new Koa();
+
+// create redis
+const redisClient = redis.createClient({ url: process.env.REDIS_URL });
+app.context.redis = redisClient;
 
 // create logger
 const logger = setupLogger(process.env);
@@ -135,6 +141,15 @@ function addEventListeners(conn, tipbotClient) {
 }
 
 async function main() {
+  // connect redis
+  redisClient.on('ready', () => {
+    logger.info('connected to redis');
+  })
+  redisClient.on('error', (err) => {
+    logger.error(e);
+  })
+  await redisClient.connect();
+
   // verify credentials
   const currentUser = await twitterClient.v1.verifyCredentials();
   logger.info('twitter access token verification passed');
@@ -148,7 +163,7 @@ async function main() {
     headers: '',
     clientConfig: {
       keepalive: true,
-      keepaliveInterval: 50000,
+      keepaliveInterval: 30000,
     },
     retryTimes: 10,
     retryInterval: 10000
@@ -158,7 +173,7 @@ async function main() {
   // FIXME connectConnect and connectClose will be override.
   conn.on('close', () => {});
   const provider= new ViteAPI(conn, async (provider) => {
-    logger.info(`vite node(${viteNode}) connected`);
+    logger.info(`connected to vite node(${viteNode})`);
     // create tipbot client
     const tipbotClient = new TipBotContractClient({
       provider,

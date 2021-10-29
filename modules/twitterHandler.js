@@ -5,6 +5,14 @@ async function dmHandler(ctx, event) {
   if (!event.type == 'message_create') {
     return;
   }
+  const eventStr = await ctx.redis.GET(event.id);
+  if (eventStr != null) {
+    return;
+  } else {
+    await ctx.redis.SET(event.id, JSON.stringify(event), {
+      EX: 300,
+    });
+  }
   const msg = event.message_create.message_data.text.trim();
   const parsedMsg = msg.split(' ');
   const command = parsedMsg.find((x) => x.startsWith('!'));
@@ -121,6 +129,14 @@ async function tweetHandler(ctx, event) {
   const senderId = event.user.id_str;
   if (senderId == ctx.twitterOwner.id_str) {
     return;
+  }
+  const eventStr = await ctx.redis.GET(event.id_str);
+  if (eventStr != null) {
+    return;
+  } else {
+    await ctx.redis.SET(event.id_str, JSON.stringify(event), {
+      EX: 300,
+    });
   }
   const parsedMsg = event.text.trim().split(' ');
   const idx = parsedMsg.findIndex((x) => x.startsWith('!tip'));
