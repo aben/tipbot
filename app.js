@@ -136,7 +136,7 @@ function addEventListeners(conn, tipbotClient) {
   conn.socket.addEventListener('close', (event) => {
     logger.info('websocket is closed now');
     conn.reconnect();
-    addListener(conn);
+    addEventListeners(conn, tipbotClient);
   })
 }
 
@@ -146,7 +146,7 @@ async function main() {
     logger.info('connected to redis');
   })
   redisClient.on('error', (err) => {
-    logger.error(e);
+    logger.error(err);
   })
   await redisClient.connect();
 
