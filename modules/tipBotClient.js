@@ -175,10 +175,9 @@ class TipBotContractClient {
       }
     })
     this.logger.info(`subscribe ${this.addressList.length} addresses event successful`);
-    this.event.once('addUser', async ([ret]) => {
-      if (ret.result == 'success') {
-        await this.subscribeAddressListEvent();
-      }
+    this.event.once('addUser', async (ret) => {
+      this.logger.info('receive addUser event %j, resubscribe address list', ret);
+      await this.subscribeAddressListEvent();
     })
   }
   async subscribeUnreceivedEvent(address){

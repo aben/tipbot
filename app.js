@@ -82,7 +82,6 @@ router.get('/webhook/twitter', (ctx, next) => {
   }
 })
 // receives Account Acitivity events
-// TODO events may be sent repeatedly, add redis
 router.post('/webhook/twitter', async(ctx, next) => {
   const sig = ctx.request.headers['x-twitter-webhooks-signature'];
   if (typeof sig == 'undefined' || typeof ctx.request.rawBody != 'string') {
@@ -120,7 +119,7 @@ app.use(router.routes());
 app.use(router.allowedMethods());
 
 async function subscribeEvent(tipbotClient) {
-  // FIXME resubscribe when websocket reconnect
+  // resubscribe when websocket reconnect
   // subscribe log event
   await tipbotClient.subscribeLogEvent(tipbotClient.address, 'ResultEvent');
   // subscribe addressList event
