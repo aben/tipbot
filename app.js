@@ -17,7 +17,7 @@ const redis = require('redis');
 const {
   TipBotContractClient,
   setupLogger,
-  readableBalance,
+  readableAmount,
   dmHandler,
   tweetHandler,
 } = require('./modules');
@@ -27,7 +27,7 @@ const app = new Koa();
 
 // create redis
 const redisClient = redis.createClient({ url: process.env.REDIS_URL });
-app.context.redis = redisClient;
+app.context.redisClient = redisClient;
 
 // create logger
 const logger = setupLogger(process.env);
@@ -123,6 +123,7 @@ async function subscribeEvent(tipbotClient) {
   // subscribe log event
   await tipbotClient.subscribeLogEvent(tipbotClient.address, 'ResultEvent');
   // subscribe addressList event
+  tipbotClient.resetSubMap();
   await tipbotClient.subscribeAddressListEvent();
 }
 
@@ -171,7 +172,7 @@ async function main() {
   // create vite Client
   // FIXME connectConnect and connectClose will be override.
   conn.on('close', () => {});
-  const provider= new ViteAPI(conn, async (provider) => {
+  const provider = new ViteAPI(conn, async (provider) => {
     logger.info(`connected to vite node(${viteNode})`);
     // create tipbot client
     const tipbotClient = new TipBotContractClient({
@@ -207,7 +208,7 @@ async function main() {
         if ( platform == 'twitter' ) {
           const dm = {
             recipient_id: userId ,
-            text: `Your account address received a deposit of ${readableBalance(event.balance)} VITE. Hash:\n${event.hash}`,
+            text: `Your account address received a deposit of ${readableAmount(event.balance)} VITE. Hash:\n${event.hash}`,
           };
           logger.info('sendDm %j', dm)
           try {

@@ -10,10 +10,10 @@ function setupLogger({
 } = {}) {
   const LOG_FILENAME_BASENAME = path.basename(LOG_FILENAME, '.log');
   const format = [
-    '{{timestamp}} [{{title}}] {{message}} (in {{file}}:{{line}})', //default format
+    '{{timestamp}} [{{title}}] {{message}} (in {{file}}:{{line}} [caller={{method}}])', //default format
     {
       error:
-      '{{timestamp}} [{{title}}] {{message}} (in {{file}}:{{line}})\nCall Stack:\n{{stack}}' // error format
+      '{{timestamp}} [{{title}}] {{message}} (in {{file}}:{{line}} [caller={{method}}])\nCall Stack:\n{{stack}}' // error format
     }
   ]
 

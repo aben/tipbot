@@ -5,13 +5,18 @@ async function dmHandler(ctx, event) {
   if (!event.type == 'message_create') {
     return;
   }
-  const eventStr = await ctx.redis.GET(event.id);
-  if (eventStr != null) {
-    return;
-  } else {
-    await ctx.redis.SET(event.id, JSON.stringify(event), {
-      EX: 300,
-    });
+  try {
+    const eventStr = await ctx.redisClient.GET(event.id);
+    ctx.logger.debug(`get event[${event.id}] from redis is ${eventStr}`);
+    if (eventStr != null) {
+      return;
+    } else {
+      await ctx.redisClient.SET(event.id, JSON.stringify(event), {
+        EX: 300,
+      });
+    }
+  } catch (err) {
+    ctx.logger.error(err);
   }
   const msg = event.message_create.message_data.text.trim();
   const parsedMsg = msg.split(' ');
@@ -33,7 +38,7 @@ async function dmHandler(ctx, event) {
       // workaround: sometimes can't receive createUnreceivedBlockSubscriptionByAddress event;
       await depositHandler(ctx, address);
     }
-    let balanceStr, balance;
+    let balance;
 
     switch (command) {
       case '!register':
@@ -60,34 +65,33 @@ async function dmHandler(ctx, event) {
 
       case '!balance':
         ctx.logger.debug('!balance', address);
-        balanceStr = await ctx.tipbotClient.getUserBalanceByAddress(address);
-        ctx.logger.debug(balanceStr)
-        dm.text = `${readableBalance(balanceStr)} VITE`;
+        balance = await ctx.tipbotClient.getUserBalanceByAddress(address);
+        ctx.logger.debug('!balance', balance);
+        dm.text = `${readableAmount(balance)} VITE`;
         break;
 
       case '!withdraw':
         const idx = parsedMsg.findIndex(x => x == '!withdraw');
-        let [amountStr, withdrawAddress] = parsedMsg.slice(idx+1, idx+3);
-        let amount
+        const [amountStr, withdrawAddress] = parsedMsg.slice(idx+1, idx+3);
+        let amount;
         if (Number.isNaN(Number(amountStr))) {
           withdrawAddress = amountStr;
           amount = null;
         } else {
-          amount = BigInt(amountStr) * BigInt(1e18);
+          amount = realAmount(amountStr);
         }
-        ctx.logger.debug('!withdraw', amount.toString(), withdrawAddress);
+        ctx.logger.debug('!withdraw', amount, withdrawAddress);
         const addrType = wallet.isValidAddress(withdrawAddress);
         if (addrType != 1 || withdrawAddress == address) {
           dm.text = 'Please provide a valid address';
         } else {
-          balanceStr = await ctx.tipbotClient.getUserBalanceByAddress(address);
-          ctx.logger.debug('balance', balanceStr);
-          balance = BigInt(balanceStr);
+          balance = await ctx.tipbotClient.getUserBalanceByAddress(address);
+          ctx.logger.debug('balance', balance);
           if (amount == null) {
             amount = balance;
           }
-          if (balance >= amount && amount > BigInt(0)) {
-            const ret = await ctx.tipbotClient.withdrawByAddress(address, withdrawAddress, amount.toString());
+          if (balance >= amount && amount > '0') {
+            const ret = await ctx.tipbotClient.withdrawByAddress(address, withdrawAddress, amount);
             if (ret) {
               dm.text = `Withdraw successful. Hash:\n${ret.hash}`;
             }
@@ -130,23 +134,34 @@ async function tweetHandler(ctx, event) {
   if (senderId == ctx.twitterOwner.id_str) {
     return;
   }
-  const eventStr = await ctx.redis.GET(event.id_str);
-  if (eventStr != null) {
-    return;
-  } else {
-    await ctx.redis.SET(event.id_str, JSON.stringify(event), {
-      EX: 300,
-    });
+  try {
+    const eventStr = await ctx.redisClient.GET(event.id_str);
+    ctx.logger.debug(`get event[${event.id_str}] from redis is ${eventStr}`);
+    if (eventStr != null) {
+      return;
+    } else {
+      await ctx.redisClient.SET(event.id_str, JSON.stringify(event), {
+        EX: 300,
+      });
+    }
+  } catch (err) {
+    ctx.logger.error(err);
   }
-  const parsedMsg = event.text.trim().split(' ');
+  const tweet = event.text.trim().replace(/\t|\n/g, ' ');
+  const parsedMsg = tweet.split(' ');
   const idx = parsedMsg.findIndex((x) => x.startsWith('!tip'));
+  if (idx  ==  -1) {
+    return;
+  }
   const amountStr = parsedMsg.find((x, i) => (i > idx && !Number.isNaN(Number(x))));
   const toUserName = parsedMsg.find((x, i) => (i > idx && x.startsWith('@')));
   if (!amountStr || !toUserName) {
     return;
   }
-  const amount = BigInt(amountStr) * BigInt(1e18);
-  const toUser = event.entities.user_mentions.find((x) => ( toUserName.startsWith(`@${x.screen_name}`)));
+  ctx.logger.info(`!tip ${amountStr} @${toUserName}`);
+  const amount = realAmount(amountStr);
+  const toUser = event.entities.user_mentions.find((x) => ( toUserName === `@${x.screen_name}`));
+  ctx.logger.info(`!tip ${amount} %j`, toUser);
 
   try {
     let text;
@@ -157,20 +172,19 @@ async function tweetHandler(ctx, event) {
       // create one
       fromAddress = await ctx.tipbotClient.deriveAddress(senderId, 'twitter');
       await ctx.tipbotClient.addUser(senderId, 'twitter', fromAddress);
-      balance = BigInt(0);
+      balance = '0';
     } else {
       // workaround: sometimes can't receive createUnreceivedBlockSubscriptionByAddress event;
       await depositHandler(ctx, fromAddress);
-      const balanceStr = await ctx.tipbotClient.getUserBalanceByAddress(fromAddress);
-      balance = BigInt(balanceStr);
+      balance = await ctx.tipbotClient.getUserBalanceByAddress(fromAddress);
     }
     if (toAddress == null) {
       // create one
       toAddress = await ctx.tipbotClient.deriveAddress(toUser.id_str, 'twitter');
       await ctx.tipbotClient.addUser(toUser.id_str, 'twitter', toAddress);
     }
-    if (balance >= amount) {
-      const ret = await ctx.tipbotClient.tip(fromAddress, toAddress, amount.toString());
+    if (balance >= amount && amount > '0') {
+      const ret = await ctx.tipbotClient.tip(fromAddress, toAddress, amount);
       text = `You have successfully sent your ${amountStr} $VITE tip. Hash:\n${ret.hash}`
     } else {
       text = `You do not have enough VITE to cover this ${amountStr} VITE tip.  Please check your balance by sending a DM to me with !balance and retry.`
@@ -181,33 +195,120 @@ async function tweetHandler(ctx, event) {
     ctx.logger.error(e);
   }
 }
+
 async function depositHandler(ctx, address) {
-  const balanceStr = await ctx.tipbotClient.getAddressBalance(address);
-  ctx.logger.debug('depositHandler', address, balanceStr);
-  if (BigInt(balanceStr) > 0n) {
+  const unreceivedBlocks = await ctx.tipbotClient.getUnreceivedBlocks(address);
+  ctx.logger.debug(`get unreceived blocks by address ${address} %j`,unreceivedBlocks)
+  if (unreceivedBlocks.length > 0) {
     const account = await ctx.tipbotClient.getAccount(address);
     if (!account) {
-      return
+      return;
     }
-    const ret = await ctx.tipbotClient.deposit(account, balanceStr);
-    ctx.logger.debug('deposit %j', ret);
-    if (ret) {
-      ctx.tipbotClient.event.emit('notify', {
-        type: 'deposit',
-        address,
-        balanceStr,
-        hash: ret.hash,
-      });
+    for ( const block of unreceivedBlocks ) {
+      await ctx.tipbotClient.receiveTransaction(account, block.hash);
+    }
+    // FIXME unreceivedEvent first
+    setTimeout(async () => {
+      const balance = await ctx.tipbotClient.getAddressBalance(address);
+      ctx.logger.debug('get address balance', address, balance);
+      if (balance > '0') {
+        const ret = await ctx.tipbotClient.deposit(account, balance);
+        this.logger.debug('deposit successful %j', ret);
+      }
+    }, 10000);
+  } else {
+    const balance = await ctx.tipbotClient.getAddressBalance(address);
+    ctx.logger.debug('get address balance', address, balance);
+    if (balance > '0') {
+      const account = await ctx.tipbotClient.getAccount(address);
+      if (!account) {
+        return;
+      }
+      const ret = await ctx.tipbotClient.deposit(account, balance);
+      this.logger.debug('deposit successful %j', ret);
     }
   }
 }
 
-function readableBalance(balance) {
-  return Number(BigInt(balance) / BigInt(1e10)) / 1e8;
+function readableAmount(amount, convert = 18) {
+  const arr = amount.toString().split('');
+  arr.reverse();
+  const intArr = arr.slice(convert);
+  let decimalArr = [];
+  // append 0 after decimal point
+  for (let i = 0; i < convert; i++) {
+    if (arr[i] === undefined) {
+      decimalArr.push('0');
+    } else {
+      decimalArr.push(arr[i]);
+    }
+  }
+  // cut suffix 0
+  const idx = decimalArr.findIndex(x => Number(x) > 0);
+  if (idx > -1) {
+    decimalArr = decimalArr.slice(idx);
+  } else {
+    decimalArr = [];
+  }
+  decimalArr.reverse();
+  intArr.reverse();
+  if (intArr.length == 0) {
+    intArr.push('0');
+  }
+  if (decimalArr.length > 0) {
+    intArr.push('.');
+  }
+  return `${intArr.join('')}${decimalArr.join('')}`
+}
+
+function realAmount(str, convert = 18) {
+  let strArr = str.split('');
+  if (strArr[0] == '+') {
+    strArr.shift();
+  } else if(strArr[0] == '-') {
+    // FIXME negative number?
+    strArr = ['0'];
+  } else if (strArr[0] == '.') {
+    strArr.unshift('0');
+  }
+  str = strArr.join('');
+  const [int, decimal] = str.toString().split('.');
+  let decimalArr = [];
+  if (decimal !== undefined) {
+    decimalArr = decimal.split('');
+  }
+  for (let i = 0; i < convert; i++) {
+    if (decimalArr[i] === undefined) {
+      decimalArr.push('0');
+    }
+  }
+  let intArr = int.split('');
+  for(let x of intArr) {
+    if (Number.isNaN(Number(x))) {
+      intArr = ['0'];
+      break;
+    }
+  }
+  for(let x of decimalArr) {
+    if (Number.isNaN(Number(x))) {
+      decimalArr = ['0'];
+      break;
+    }
+  }
+  let arr = intArr.concat(decimalArr);
+  // cut prefix 0
+  const idx = arr.findIndex(x => Number(x) > 0)
+  if (idx > -1) {
+    arr = arr.slice(idx);
+  } else {
+    arr = ['0'];
+  }
+  return arr.join('');
 }
 
 module.exports = {
   dmHandler,
   tweetHandler,
-  readableBalance,
+  readableAmount,
+  realAmount,
 }

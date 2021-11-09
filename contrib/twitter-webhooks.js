@@ -28,7 +28,7 @@ program
   .action(async() => {
     try {
       const currentUser = await client.v1.verifyCredentials();
-      console.log(currentUser.status)
+      console.log(currentUser);
     } catch (e) {
       console.log(`${e.code}: %j`, e.data)
     }

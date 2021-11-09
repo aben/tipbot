@@ -34,9 +34,9 @@ class TipBotContractClient {
 
   getAbi(methodName) {
     for (let i = 0; i < this.abi.length; i++) {
-      const abi = this.abi[i]
+      const abi = this.abi[i];
       if (abi.name === methodName) {
-        return abi
+        return abi;
       }
     }
   }
@@ -58,7 +58,7 @@ class TipBotContractClient {
     const addressList = wallet.deriveAddressList({ 
       mnemonics: mnemonics, 
       startIndex: 0,
-      endIndex: 9
+      endIndex: 9,
     });
     for (let i = 0, len = addressList.length; i < len; i++) {
       if (ownerAddr == addressList[i].address) {
@@ -81,7 +81,7 @@ class TipBotContractClient {
       previousHash: ab.previousHash,
       blockType: ab.blockType,
       toAddress: ab.toAddress,
-      data: ab.data
+      data: ab.data,
     });
     this.logger.debug('pow', ab.previousHash, pow);
     const { requiredQuota, difficulty } = pow;
@@ -152,6 +152,10 @@ class TipBotContractClient {
     return ret;
   }
 
+  async getUnreceivedBlocks(address, pageSize = 10) {
+    return await this.provider.request('ledger_getUnreceivedBlocksByAddress', address, 0, pageSize);
+  }
+
   async receiveTransaction(account, hash) {
     // create a receive tx
     const ab = accountBlock.createAccountBlock('receive', {
@@ -164,6 +168,10 @@ class TipBotContractClient {
     const ret = await ab.sign().send();
     this.logger.info('receive success %j', ret);
     return ret;
+  }
+
+  resetSubMap() {
+    this.subMap = {};
   }
 
   async subscribeAddressListEvent() {
@@ -180,6 +188,7 @@ class TipBotContractClient {
       await this.subscribeAddressListEvent();
     })
   }
+
   async subscribeUnreceivedEvent(address){
     const account = await this.getAccount(address);
     if (!account) {
@@ -192,17 +201,9 @@ class TipBotContractClient {
       try {
         if (res.received) {
           const balance = await this.getAddressBalance(account.address);
-          this.logger.debug('balance', balance);
+          this.logger.debug('get address balance', balance);
           const ret = await this.deposit(account, balance);
-          this.logger.debug('deposit %j', ret);
-          if (ret) {
-            this.event.emit('notify', {
-              type: 'deposit',
-              address,
-              balance,
-              hash: ret.hash,
-            });
-          }
+          this.logger.debug('deposit successful %j', ret);
         } else {
           await this.receiveTransaction(account, res.hash);
         }
@@ -237,7 +238,7 @@ class TipBotContractClient {
 
   async getAddressBalance(addr, tokenId=VITE_TOKENID){
     const data = await this.provider.request('ledger_getAccountInfoByAddress', addr);
-    this.logger.info('account info %j', data);
+    this.logger.info('address info %j', data);
     if (data.balanceInfoMap && data.balanceInfoMap[tokenId]) {
       return data.balanceInfoMap[tokenId]['balance'];
     } else {
@@ -404,6 +405,12 @@ class TipBotContractClient {
     const [ret] = await once(this.event, 'deposit');
     this.logger.info(ret);
     if (ret.result == 'success') {
+      this.event.emit('notify', {
+        type: 'deposit',
+        address: account.address,
+        balance: amount,
+        hash: info.hash,
+      });
       return info;
     } else {
       return false;

@@ -27,7 +27,7 @@ program
   .description('verify credentials')
   .action(async() => {
     const currentUser = await client.v1.verifyCredentials();
-    console.log(currentUser.status)
+    console.log(currentUser)
   })
 
 program
