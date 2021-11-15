@@ -111,7 +111,7 @@ router.post('/webhook/twitter', async(ctx, next) => {
         break;
     }
   }
-  ctx.body = 'hello twitter';
+  ctx.body = 'Hello Twitter';
 })
 
 

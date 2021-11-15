@@ -72,31 +72,35 @@ async function dmHandler(ctx, event) {
 
       case '!withdraw':
         const idx = parsedMsg.findIndex(x => x == '!withdraw');
-        const [amountStr, withdrawAddress] = parsedMsg.slice(idx+1, idx+3);
-        let amount;
-        if (Number.isNaN(Number(amountStr))) {
-          withdrawAddress = amountStr;
-          amount = null;
+        let [amountStr, withdrawAddress] = parsedMsg.slice(idx+1, idx+3);
+        if (amountStr === undefined && withdrawAddress === undefined) {
+          dm.text = 'Incorrect command. Format: !withdraw <amount> <address>';
         } else {
-          amount = realAmount(amountStr);
-        }
-        ctx.logger.debug('!withdraw', amount, withdrawAddress);
-        const addrType = wallet.isValidAddress(withdrawAddress);
-        if (addrType != 1 || withdrawAddress == address) {
-          dm.text = 'Please provide a valid address';
-        } else {
-          balance = await ctx.tipbotClient.getUserBalanceByAddress(address);
-          ctx.logger.debug('balance', balance);
-          if (amount == null) {
-            amount = balance;
-          }
-          if (balance >= amount && amount > '0') {
-            const ret = await ctx.tipbotClient.withdrawByAddress(address, withdrawAddress, amount);
-            if (ret) {
-              dm.text = `Withdraw successful. Hash:\n${ret.hash}`;
-            }
+          let amount;
+          if (Number.isNaN(Number(amountStr))) {
+            withdrawAddress = amountStr;
+            amount = null;
           } else {
-            dm.text = 'Your account address have not enough balance';
+            amount = realAmount(amountStr);
+          }
+          ctx.logger.debug('!withdraw', amount, withdrawAddress);
+          const addrType = wallet.isValidAddress(withdrawAddress);
+          if (addrType != 1 || withdrawAddress == address) {
+            dm.text = 'Please provide a valid address';
+          } else {
+            balance = await ctx.tipbotClient.getUserBalanceByAddress(address);
+            ctx.logger.debug('balance', balance);
+            if (amount == null) {
+              amount = balance;
+            }
+            if (balance >= amount && amount > '0') {
+              const ret = await ctx.tipbotClient.withdrawByAddress(address, withdrawAddress, amount);
+              if (ret) {
+                dm.text = `Withdraw successful. Hash:\n${ret.hash}`;
+              }
+            } else {
+              dm.text = 'Your account address have not enough balance';
+            }
           }
         }
         break;
@@ -107,7 +111,7 @@ async function dmHandler(ctx, event) {
           '!register: register an account address',
           '!account: return the account address',
           '!balance: return the balance of your account address',
-          '!withdraw: send the balance of your account to the provided address. Example: !withdraw <amount> <address>',
+          '!withdraw: send the balance of your account to the provided address. Format: !withdraw <amount> <address>',
           '!tip: tips are sent through public tweets. Example: @star_vite !tip 5 @vitelabs',
         ].join('\n\n');
         break;
@@ -154,6 +158,7 @@ async function tweetHandler(ctx, event) {
     return;
   }
   const amountStr = parsedMsg.find((x, i) => (i > idx && !Number.isNaN(Number(x))));
+  // TODO should remove all punctuation in the toUserName except underscore? maybe based on usage feedback.
   const toUserName = parsedMsg.find((x, i) => (i > idx && x.startsWith('@')));
   if (!amountStr || !toUserName) {
     return;
