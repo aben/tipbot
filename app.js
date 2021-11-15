@@ -119,11 +119,11 @@ app.use(router.routes());
 app.use(router.allowedMethods());
 
 async function subscribeEvent(tipbotClient) {
+  tipbotClient.resetSubMap();
   // resubscribe when websocket reconnect
   // subscribe log event
   await tipbotClient.subscribeLogEvent(tipbotClient.address, 'ResultEvent');
   // subscribe addressList event
-  tipbotClient.resetSubMap();
   await tipbotClient.subscribeAddressListEvent();
 }
 

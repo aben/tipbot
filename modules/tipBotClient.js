@@ -132,6 +132,8 @@ class TipBotContractClient {
       };
     };
     this.logger.info(`subscribe ${eventName} event successful ${address} ${subscription.id}`);
+    // add to subMap for cleanup
+    this.subMap[address] = subscription;
     return subscription;
   }
 
@@ -171,6 +173,9 @@ class TipBotContractClient {
   }
 
   resetSubMap() {
+    for(const x of Object.values(this.subMap)) {
+      this.provider.unsubscribe(x);
+    }
     this.subMap = {};
   }
 
@@ -183,10 +188,6 @@ class TipBotContractClient {
       }
     })
     this.logger.info(`subscribe ${this.addressList.length} addresses event successful`);
-    this.event.once('addUser', async (ret) => {
-      this.logger.info('receive addUser event %j, resubscribe address list', ret);
-      await this.subscribeAddressListEvent();
-    })
   }
 
   async subscribeUnreceivedEvent(address){
@@ -383,6 +384,8 @@ class TipBotContractClient {
     })
     const [ret] = await once(this.event, 'addUser');
     if (ret.result == 'success') {
+      this.logger.info('receive addUser event %j, resubscribe address list', ret);
+      await this.subscribeAddressListEvent();
       return info;
     } else {
       return false;

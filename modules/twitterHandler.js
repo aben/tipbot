@@ -74,7 +74,7 @@ async function dmHandler(ctx, event) {
         const idx = parsedMsg.findIndex(x => x == '!withdraw');
         let [amountStr, withdrawAddress] = parsedMsg.slice(idx+1, idx+3);
         if (amountStr === undefined && withdrawAddress === undefined) {
-          dm.text = 'Incorrect command. Format: !withdraw <amount> <address>';
+          dm.text = 'Incorrect command. Format:\n!withdraw <amount> <address>';
         } else {
           let amount;
           if (Number.isNaN(Number(amountStr))) {
