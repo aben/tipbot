@@ -1,5 +1,5 @@
 # Tipbot
-A bot can send cyptocurrency and on the [VITE](https://www.vite.org) blockchain.
+A bot can send cyptocurrency and on the [VITE](https://www.vite.org) blockchain. It is currently being tested on twitter and can be used at [@star_vite](https://twitter.com/star_vite).
 
 ## DM Commands
 * `!help`: display help for command.
@@ -14,3 +14,7 @@ A bot can send cyptocurrency and on the [VITE](https://www.vite.org) blockchain.
 ## TODO
 - [ ] i18n
 - [ ] Support all other tokens on the VITE blockchain
+
+
+## License
+All directories and files are MIT Licensed.
